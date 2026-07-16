@@ -1,0 +1,89 @@
+# Codemagic CI/CD for Nebula Stats — builds a signed IPA and pushes it to TestFlight.
+#
+# ── Plug in your Apple account (3 steps, all in Codemagic's UI + this file) ──
+#
+#  1. In the NEW Apple Developer account, create an App Store Connect API key:
+#     App Store Connect → Users and Access → Integrations → App Store Connect API
+#     → generate a key with "App Manager" access. Download the .p8 once.
+#  2. In Codemagic: Teams → Integrations → Developer Portal → add that key.
+#     Name it exactly as `app_store_connect:` below (or change the name below).
+#  3. Fill the three vars marked CHANGEME below. Codemagic's signing step will
+#     create the bundle id and provisioning profiles in the account
+#     automatically on the first run.
+#
+# Local builds are unaffected: run.sh / Xcode read Config/AppConfig.xcconfig.
+
+workflows:
+  ios-release:
+    name: Nebula Stats → App Store
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+
+    integrations:
+      # CHANGEME (2): the name you gave the API key in Codemagic → Integrations.
+      app_store_connect: nebula-asc-key
+
+    environment:
+      xcode: latest
+      vars:
+        # CHANGEME (1): your bundle id, registered under the new account.
+        BUNDLE_ID: "com.martinmorris.nebulastats"
+        # CHANGEME (3): the numeric Apple ID of the app record in App Store
+        # Connect (App Information → Apple ID) — needed for build numbering.
+        APP_STORE_APP_ID: "6791660668"
+        XCODE_PROJECT: "NebulaStats.xcodeproj"
+        XCODE_SCHEME: "NebulaStats"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: $BUNDLE_ID
+
+    scripts:
+      - name: Point the project at the CI bundle id
+        script: |
+          # codemagic.yaml is the source of truth in CI: rewrite the local
+          # config so the generated project matches the signing files.
+          cat > Config/AppConfig.xcconfig <<EOF
+          PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID
+          CODE_SIGN_STYLE = Manual
+          EOF
+
+      - name: Generate Xcode project
+        script: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
+      - name: Apply provisioning profiles
+        script: |
+          xcode-project use-profiles
+
+      - name: Set incremental build number
+        script: |
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APP_ID" \
+            || app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" \
+            || echo 0)
+          agvtool new-version -all $((LATEST + 1))
+
+      - name: Build signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Submit the build straight to App Store review.
+        # PREREQUISITE: the app record must already exist in App Store Connect
+        # with its metadata filled in (description, keywords, screenshots,
+        # privacy answers, policy URL) — Codemagic attaches the build and
+        # submits; it cannot create the listing content for you.
+        submit_to_app_store: true
+        # Release automatically once Apple approves. Use MANUAL if you want
+        # to press the final "Release" button yourself.
+        release_type: AFTER_APPROVAL
+        cancel_previous_submissions: true
+        submit_to_testflight: false

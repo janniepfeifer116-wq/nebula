@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nebula Stats — Mission control for your device.</title>
+<meta name="description" content="Nebula Stats shows your iPhone's live telemetry — CPU, memory, storage, battery, network and display — in a dark mission-control dashboard. Zero permissions, zero accounts, nothing leaves your device.">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%230B0B1E"/><circle cx="32" cy="32" r="17" fill="none" stroke="%2338BDF8" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="80 27" transform="rotate(120 32 32)"/><circle cx="32" cy="32" r="6.5" fill="%23A78BFA"/><circle cx="48" cy="23" r="2.6" fill="%23C4B5FD"/></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --space:#0B0B1E; --space-2:#11112B; --panel:rgba(255,255,255,.04); --panel-2:rgba(140,120,255,.07);
+    --line:rgba(255,255,255,.10); --line-violet:rgba(167,139,250,.28); --line-cyan:rgba(56,189,248,.26); --line-green:rgba(74,222,128,.24);
+    --text:#F2F2FA; --dim:#9C9FC6; --faint:#6B7099; --micro:#9FA6D8;
+    --violet:#A78BFA; --violet-hi:#C4B5FD; --cyan:#38BDF8; --cyan-hi:#7DD3FC; --green:#4ADE80; --amber:#FBBF24;
+    --display:"Chakra Petch",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    font-family:var(--display); color:var(--text); -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(1000px 560px at 85% -140px, rgba(42,27,84,.9), transparent 60%),
+      radial-gradient(900px 520px at -10% 38%, rgba(18,43,74,.8), transparent 62%),
+      radial-gradient(1100px 640px at 50% 118%, rgba(27,20,64,.9), transparent 58%),
+      var(--space);
+    background-attachment:fixed;
+    overflow-x:hidden;
+  }
+  a{ color:var(--cyan-hi); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+  .wrap{ max-width:1040px; margin:0 auto; padding:0 22px; }
+  .mono{ font-family:var(--mono); }
+
+  /* starfield */
+  .stars{ position:fixed; inset:0; pointer-events:none; z-index:0; }
+  .stars i{ position:absolute; border-radius:50%; background:#fff; }
+  @media (prefers-reduced-motion: no-preference){
+    .stars i{ animation:twinkle 4s ease-in-out infinite alternate; }
+    @keyframes twinkle{ from{ opacity:.18; } to{ opacity:.7; } }
+  }
+  main, header, footer{ position:relative; z-index:1; }
+
+  /* ============ header ============ */
+  header{
+    position:sticky; top:0; z-index:10;
+    background:rgba(11,11,30,.8); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .bar{ display:flex; align-items:center; gap:14px; height:60px; }
+  .mark{ display:flex; align-items:center; gap:11px; }
+  @media (prefers-reduced-motion: no-preference){
+    .mark svg{ animation:orbitspin 26s linear infinite; }
+    @keyframes orbitspin{ to{ transform:rotate(360deg); } }
+  }
+  .mark .name{ font-weight:700; font-size:18px; letter-spacing:.04em; }
+  .mark .name span{ color:var(--faint); font-weight:500; font-size:11px; letter-spacing:.3em; margin-left:6px; }
+  nav{ margin-left:auto; display:flex; gap:4px; }
+  nav a{
+    font-size:12.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
+    padding:8px 13px; border-radius:16px; transition:.2s;
+  }
+  nav a:hover{ color:var(--text); background:rgba(167,139,250,.14); text-decoration:none; }
+  @media (max-width:620px){ nav a:not([href="#privacy"]){ display:none; } }
+
+  /* ============ hero ============ */
+  .hero{ padding:64px 0 30px; display:grid; grid-template-columns:1.05fr .95fr; gap:44px; align-items:center; }
+  @media (max-width:900px){ .hero{ grid-template-columns:1fr; padding-top:42px; } }
+  .hero h1{ font-weight:700; font-size:clamp(40px,6vw,64px); line-height:1.02; letter-spacing:-.01em; }
+  .hero h1 em{ font-style:normal; background:linear-gradient(120deg,var(--cyan) 10%,var(--violet) 90%);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero .lede{ margin-top:18px; font-size:16.5px; line-height:1.65; color:var(--dim); max-width:48ch; }
+  .hero .lede b{ color:var(--text); font-weight:600; }
+
+  .readouts{ margin-top:26px; display:flex; flex-wrap:wrap; gap:10px; }
+  .readout{
+    font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.16em;
+    color:var(--cyan-hi); background:rgba(56,189,248,.07);
+    border:1px solid var(--line-cyan); border-radius:6px; padding:9px 14px;
+  }
+  .readout.green{ color:var(--green); border-color:var(--line-green); background:rgba(74,222,128,.06); }
+  .readout.violet{ color:var(--violet-hi); border-color:var(--line-violet); background:rgba(167,139,250,.08); }
+
+  .store{ margin-top:30px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .store .btn{
+    display:inline-flex; align-items:center; gap:10px;
+    font-weight:600; font-size:15px; color:#fff;
+    background:linear-gradient(135deg,#8B5CF6,#D946EF);
+    padding:14px 26px; border-radius:14px;
+    box-shadow:0 0 26px rgba(139,92,246,.45);
+    transition:transform .2s, box-shadow .2s;
+  }
+  .store .btn:hover{ transform:translateY(-1px); box-shadow:0 0 36px rgba(139,92,246,.65); text-decoration:none; }
+  .store .note{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; color:var(--faint); }
+
+  /* ============ the console (phone mock) ============ */
+  .console{ position:relative; display:flex; justify-content:center; }
+  .phone{
+    width:min(320px,86vw); border-radius:46px; padding:10px;
+    background:linear-gradient(160deg,#23233f,#12122a);
+    box-shadow:0 40px 90px -34px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.12), 0 0 60px rgba(139,92,246,.12);
+  }
+  .screen{
+    border-radius:37px; overflow:hidden; padding:20px 16px 16px;
+    background:
+      radial-gradient(300px 180px at 88% -8%, rgba(42,27,84,.95), transparent 62%),
+      radial-gradient(260px 190px at -12% 42%, rgba(18,43,74,.85), transparent 62%),
+      var(--space);
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .s-head{ display:flex; justify-content:space-between; align-items:baseline; padding:2px 4px 4px; }
+  .s-head .t{ font-weight:700; font-size:15px; } .s-head .t span{ font-size:8px; letter-spacing:.22em; color:var(--faint); margin-left:5px; }
+  .s-head .live{ font-family:var(--mono); font-size:8.5px; color:var(--green); letter-spacing:.08em; }
+  .s-head .live::before{ content:"●"; margin-right:4px; }
+  @media (prefers-reduced-motion: no-preference){
+    .s-head .live::before{ animation:pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:12px 13px;
+  }
+  .card.hero-c{ background:var(--panel-2); border-color:var(--line-violet); box-shadow:0 0 24px rgba(139,92,246,.16);
+    display:flex; gap:14px; align-items:center; }
+  .eyebrow{ font-size:8px; font-weight:600; letter-spacing:.2em; color:var(--micro); text-transform:uppercase; }
+  .orb{ position:relative; width:84px; height:84px; flex:none; }
+  .orb svg{ transform:rotate(-90deg); }
+  .orb .track{ stroke:rgba(255,255,255,.08); }
+  .orb .arc{
+    stroke:url(#g1); stroke-linecap:round; stroke-dasharray:226;
+    filter:drop-shadow(0 0 5px rgba(139,92,246,.75));
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .orb .arc{ animation:sweep 3.4s ease-in-out infinite alternate; }
+    @keyframes sweep{ from{ stroke-dashoffset:150; } to{ stroke-dashoffset:110; } }
+  }
+  .orb .val{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:600; font-size:20px; }
+  .orb .val small{ font-size:8px; color:var(--dim); letter-spacing:.18em; margin-top:1px; }
+  .hero-c .rows{ display:flex; flex-direction:column; gap:5px; }
+  .hero-c .rows .r{ font-family:var(--mono); font-size:10px; color:var(--faint); }
+  .hero-c .rows .r b{ font-weight:600; } .r b.v{ color:var(--violet-hi);} .r b.c{ color:var(--cyan-hi);} .r b.d{ color:var(--dim);}
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .bar-track{ height:5px; border-radius:3px; background:rgba(255,255,255,.07); margin-top:8px; overflow:hidden; }
+  .bar-fill{ height:100%; width:76%; border-radius:3px; background:linear-gradient(90deg,var(--cyan),var(--cyan-hi));
+    box-shadow:0 0 8px rgba(56,189,248,.6); }
+  .kv{ font-family:var(--mono); font-size:12.5px; font-weight:600; margin-top:6px; }
+  .kv small{ font-size:8.5px; color:var(--dim); font-weight:400; }
+  .foot{ font-family:var(--mono); font-size:7.5px; color:var(--faint); letter-spacing:.1em; margin-top:7px; }
+  .spark{ margin-top:6px; }
+  .spark polyline{ fill:none; stroke:var(--green); stroke-width:1.6;
+    filter:drop-shadow(0 0 3px rgba(74,222,128,.7)); }
+  .spark .area{ fill:url(#g2); stroke:none; }
+  .updown{ font-family:var(--mono); font-size:9.5px; margin-top:5px; }
+  .updown .d{ color:var(--green);} .updown .u{ color:var(--cyan-hi); margin-left:8px; }
+  .tabs{ display:flex; justify-content:space-around; padding:9px 4px 3px; border:1px solid var(--line);
+    border-radius:16px; background:rgba(255,255,255,.05); }
+  .tabs span{ font-size:6.5px; letter-spacing:.14em; color:var(--faint); text-transform:uppercase; font-weight:600;
+    display:flex; flex-direction:column; align-items:center; gap:3px; padding-bottom:5px; }
+  .tabs span::before{ content:""; width:14px; height:14px; border-radius:4px; border:1.3px solid currentColor; opacity:.8; }
+  .tabs span.on{ color:var(--violet-hi); text-shadow:0 0 8px rgba(167,139,250,.8); }
+
+  /* ============ sections ============ */
+  section{ padding:64px 0; }
+  .sec-eyebrow{
+    font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--micro); display:flex; align-items:center; gap:12px;
+  }
+  .sec-eyebrow::after{ content:""; height:1px; flex:1; background:linear-gradient(90deg,var(--line-violet),transparent); }
+  h2{ margin-top:14px; font-size:clamp(28px,4vw,40px); font-weight:700; letter-spacing:-.01em; }
+  .sec-lede{ margin-top:12px; color:var(--dim); font-size:15.5px; line-height:1.65; max-width:62ch; }
+
+  .features{ margin-top:34px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:880px){ .features{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .features{ grid-template-columns:1fr; } }
+  .feature{
+    background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:20px 18px;
+    transition:border-color .25s, transform .25s, box-shadow .25s;
+  }
+  .feature:hover{ transform:translateY(-3px); }
+  .feature.v:hover{ border-color:var(--line-violet); box-shadow:0 0 24px rgba(139,92,246,.14); }
+  .feature.c:hover{ border-color:var(--line-cyan); box-shadow:0 0 24px rgba(56,189,248,.12); }
+  .feature.g:hover{ border-color:var(--line-green); box-shadow:0 0 24px rgba(74,222,128,.12); }
+  .feature .tag{ font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.22em; text-transform:uppercase; }
+  .feature.v .tag{ color:var(--violet-hi);} .feature.c .tag{ color:var(--cyan-hi);} .feature.g .tag{ color:var(--green);}
+  .feature h3{ margin-top:10px; font-size:17px; font-weight:600; }
+  .feature p{ margin-top:8px; font-size:13.5px; line-height:1.6; color:var(--dim); }
+
+  /* ============ privacy — the mission log ============ */
+  #privacy{
+    border-top:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(17,17,43,.5), transparent 30%);
+  }
+  .logbook{
+    margin-top:30px; border:1px solid var(--line-violet); border-radius:20px; overflow:hidden;
+    background:rgba(255,255,255,.03);
+  }
+  .logbook table{ width:100%; border-collapse:collapse; }
+  .logbook th{
+    font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.24em; text-transform:uppercase;
+    color:var(--micro); text-align:left; padding:14px 20px; border-bottom:1px solid var(--line);
+    background:rgba(167,139,250,.06);
+  }
+  .logbook td{ padding:15px 20px; border-bottom:1px solid rgba(255,255,255,.06); vertical-align:top; font-size:13.5px; }
+  .logbook tr:last-child td{ border-bottom:none; }
+  .logbook td:first-child{ width:58%; color:var(--dim); line-height:1.6; }
+  .logbook td:first-child b{ color:var(--text); font-weight:600; display:block; margin-bottom:3px; font-size:14px; }
+  .logbook td:last-child{ font-family:var(--mono); font-size:12px; color:var(--green); letter-spacing:.06em; white-space:nowrap; }
+  .logbook td:last-child.amber{ color:var(--amber); }
+  .prose{ margin-top:26px; display:grid; gap:22px; max-width:74ch; }
+  .prose h3{ font-size:16px; font-weight:600; letter-spacing:.02em; }
+  .prose h3 .idx{ font-family:var(--mono); color:var(--violet-hi); font-size:12px; margin-right:8px; }
+  .prose p{ margin-top:7px; font-size:14px; line-height:1.7; color:var(--dim); }
+  .prose p b{ color:var(--text); font-weight:600; }
+  .oath{
+    margin-top:34px; padding:22px 24px; border-left:2px solid var(--violet);
+    background:rgba(167,139,250,.06); border-radius:0 14px 14px 0;
+    font-size:14px; line-height:1.7; color:var(--dim); font-style:italic; max-width:66ch;
+  }
+  .oath b{ color:var(--violet-hi); font-style:normal; }
+  .effective{ margin-top:18px; font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--faint); }
+
+  /* ============ footer ============ */
+  footer{ border-top:1px solid var(--line); padding:30px 0 44px; }
+  .f-row{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  .f-row .links{ margin-left:auto; display:flex; gap:18px; }
+  .f-row .links a{ font-size:12.5px; color:var(--dim); }
+  .small{ margin-top:14px; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; color:var(--faint); }
+
+  /* reveal on load */
+  @media (prefers-reduced-motion: no-preference){
+    .rise{ opacity:0; transform:translateY(14px); animation:rise .7s cubic-bezier(.2,.7,.3,1) forwards; }
+    .rise.d1{ animation-delay:.08s; } .rise.d2{ animation-delay:.16s; } .rise.d3{ animation-delay:.26s; }
+    @keyframes rise{ to{ opacity:1; transform:none; } }
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" aria-hidden="true">
+  <i style="left:8%; top:14%; width:2px; height:2px;"></i>
+  <i style="left:22%; top:62%; width:1.5px; height:1.5px; animation-delay:1.2s;"></i>
+  <i style="left:38%; top:30%; width:1.5px; height:1.5px; animation-delay:.6s;"></i>
+  <i style="left:57%; top:80%; width:2px; height:2px; animation-delay:2s;"></i>
+  <i style="left:71%; top:22%; width:1.5px; height:1.5px; animation-delay:.3s;"></i>
+  <i style="left:86%; top:56%; width:2px; height:2px; animation-delay:1.7s;"></i>
+  <i style="left:93%; top:12%; width:1.5px; height:1.5px; animation-delay:.9s;"></i>
+  <i style="left:14%; top:88%; width:1.5px; height:1.5px; animation-delay:2.4s;"></i>
+</div>
+
+<header>
+  <div class="wrap bar">
+    <div class="mark">
+      <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="17" fill="none" stroke="#38BDF8" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="80 27" transform="rotate(120 32 32)"/>
+        <circle cx="32" cy="32" r="6.5" fill="#A78BFA"/>
+        <circle cx="48" cy="23" r="2.6" fill="#C4B5FD"/>
+      </svg>
+      <div class="name">Nebula <span>STATS</span></div>
+    </div>
+    <nav>
+      <a href="#systems">Systems</a>
+      <a href="#score">Score</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <div class="wrap hero">
+    <div>
+      <h1 class="rise">Mission control<br>for <em>your device</em>.</h1>
+      <p class="lede rise d1">
+        Nebula Stats turns your iPhone or iPad into its own flight console:
+        <b>live CPU, memory, storage, battery, network and display telemetry</b>,
+        refreshed every second and drawn like the instrument panel of a starship.
+      </p>
+      <div class="readouts rise d2" role="list">
+        <span class="readout green" role="listitem">0 PERMISSIONS</span>
+        <span class="readout" role="listitem">NO ACCOUNTS</span>
+        <span class="readout" role="listitem">NO ADS</span>
+        <span class="readout violet" role="listitem">DATA STAYS ABOARD</span>
+      </div>
+      <div class="store rise d3">
+        <a class="btn" href="https://apps.apple.com/app/id6791660668" aria-label="Download Nebula Stats on the App Store">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8.84-.17 1.64-.86 3.11-.75 1.28.1 2.25.61 2.9 1.53-2.66 1.6-2.03 5.11.42 6.09-.5 1.31-1.15 2.6-2.51 3.3ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z"/></svg>
+          Coming to the App Store
+        </a>
+        <span class="note">iOS 17+ · iPhone &amp; iPad</span>
+      </div>
+    </div>
+
+    <!-- the console -->
+    <div class="console rise d2" aria-hidden="true">
+      <div class="phone"><div class="screen">
+        <svg width="0" height="0" style="position:absolute">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stop-color="#38BDF8"/><stop offset="1" stop-color="#A78BFA"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="rgba(74,222,128,.3)"/><stop offset="1" stop-color="rgba(74,222,128,0)"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="s-head">
+          <div class="t">Nebula <span>STATS</span></div>
+          <div class="live">LIVE · 1s</div>
+        </div>
+        <div class="card hero-c">
+          <div class="orb">
+            <svg width="84" height="84" viewBox="0 0 84 84">
+              <circle class="track" cx="42" cy="42" r="36" fill="none" stroke-width="7"/>
+              <circle class="arc" cx="42" cy="42" r="36" fill="none" stroke-width="7" stroke-dashoffset="130"/>
+            </svg>
+            <div class="val">42<small>CPU %</small></div>
+          </div>
+          <div class="rows">
+            <div class="eyebrow">CPU load</div>
+            <div class="r">PERF <b class="v">58%</b></div>
+            <div class="r">EFF <b class="c">31%</b></div>
+            <div class="r">A18 PRO <b class="d">6 CORES</b></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="eyebrow">Memory</div>
+            <div class="kv">3.1 <small>/ 8 GB</small></div>
+            <div class="bar-track"><div class="bar-fill" style="width:39%"></div></div>
+            <div class="foot">4.9 GB FREE</div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Network</div>
+            <div class="updown"><span class="d">▼ 86.1</span><span class="u">▲ 2.4</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 120 26" preserveAspectRatio="none">
+              <polygon class="area" points="0,18 20,14 40,16 60,7 80,10 100,4 120,8 120,26 0,26"/>
+              <polyline points="0,18 20,14 40,16 60,7 80,10 100,4 120,8"/>
+            </svg>
+            <div class="foot">MB/S · WI-FI</div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Battery</div>
+            <div class="kv">78 <small>%</small></div>
+            <div class="foot" style="color:#4ADE80">⚡ CHARGING</div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Display</div>
+            <div class="kv">120 <small>FPS</small></div>
+            <div class="foot">PROMOTION · 120 HZ</div>
+          </div>
+        </div>
+        <div class="tabs">
+          <span class="on">Dash</span><span>Perf</span><span>Net</span><span>Display</span>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ============ SYSTEMS ============ -->
+  <section id="systems">
+    <div class="wrap">
+      <div class="sec-eyebrow">№ 1 · Flight systems</div>
+      <h2>Every gauge your phone never showed you.</h2>
+      <p class="sec-lede">
+        All of it read through Apple's public APIs, computed on your device, and refreshed live while
+        the app is open. Nothing runs in the background; nothing is written down.
+      </p>
+      <div class="features">
+        <div class="feature v">
+          <div class="tag">CPU</div>
+          <h3>Per-core load</h3>
+          <p>Watch performance and efficiency cores light up in real time, with a rolling 60-second history chart.</p>
+        </div>
+        <div class="feature c">
+          <div class="tag">Memory</div>
+          <h3>Active · wired · compressed</h3>
+          <p>The real memory picture — including the app's own footprint, so you can see exactly what it costs to watch.</p>
+        </div>
+        <div class="feature v">
+          <div class="tag">Storage</div>
+          <h3>Honest free space</h3>
+          <p>The same numbers Settings shows, drawn as a glowing ring instead of a buried table.</p>
+        </div>
+        <div class="feature g">
+          <div class="tag">Battery</div>
+          <h3>Level &amp; thermal state</h3>
+          <p>Charge, charging state, Low Power Mode and the device's thermal reading, live on the dashboard.</p>
+        </div>
+        <div class="feature g">
+          <div class="tag">Network</div>
+          <h3>Throughput &amp; speed test</h3>
+          <p>Live down/up rates, your addresses, and a built-in speed test with a 7-day on-device history.</p>
+        </div>
+        <div class="feature c">
+          <div class="tag">Display</div>
+          <h3>Live FPS meter</h3>
+          <p>See ProMotion ramp to 120 Hz before your eyes — with a stress mode that makes the panel prove it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCORE ============ -->
+  <section id="score">
+    <div class="wrap">
+      <div class="sec-eyebrow">№ 2 · The Nebula Score</div>
+      <h2>Six seconds of full thrust.</h2>
+      <p class="sec-lede">
+        A quick engine test for your chip: one core at full power, then all of them. Pure math — the same
+        kind of work a game creates, over in seconds. The app reads iOS's thermal sensor before and during
+        the run and simply refuses to start if your device is already warm. Nothing on your phone is
+        touched, written or changed; you just learn what it can do.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ PRIVACY ============ -->
+  <section id="privacy">
+    <div class="wrap">
+      <div class="sec-eyebrow">№ 3 · Privacy policy — the mission log</div>
+      <h2>The console reads the ship.<br>It reports to no one.</h2>
+      <p class="sec-lede">
+        A good instrument panel shows the pilot everything and transmits nothing. Nebula Stats is built
+        that way, and this page is its complete privacy policy — the mission log, with every cargo column
+        empty on purpose.
+      </p>
+
+      <div class="logbook">
+        <table>
+          <thead><tr><th>Log entry</th><th>Cargo</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>Accounts &amp; sign-in</b>No registration, no email, no password, no "continue with" anything. The app has no idea who you are.</td>
+              <td>— none —</td>
+            </tr>
+            <tr>
+              <td><b>Analytics &amp; telemetry</b>No usage tracking, no crash reporters, no identifiers, no third-party SDKs of any kind. Not anonymised — absent.</td>
+              <td>— none —</td>
+            </tr>
+            <tr>
+              <td><b>Advertising</b>No ads, no ad networks, nothing for an ad network to learn.</td>
+              <td>— none —</td>
+            </tr>
+            <tr>
+              <td><b>Device permissions</b>Location, camera, microphone, contacts, photos, notifications: never requested. The app asks iOS for nothing.</td>
+              <td>— never asked —</td>
+            </tr>
+            <tr>
+              <td><b>Data collected by us</b>The stats you see — CPU, memory, storage, battery, network, display — are computed on your device and drawn on your screen. They are never transmitted, logged or stored by us, because there is no "us" server to send them to.</td>
+              <td>— zero —</td>
+            </tr>
+            <tr>
+              <td><b>Network calls</b>Exactly two features talk to the internet, both only when you tap them — see the flight notes below. Everything else works in airplane mode.</td>
+              <td class="amber">— 2 · user-initiated —</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="prose">
+        <div>
+          <h3><span class="idx">3.1</span>The two buttons that use the internet</h3>
+          <p>
+            <b>The speed test.</b> When you tap "Run test", the app exchanges randomized test traffic with
+            Cloudflare's public measurement service (<span class="mono">speed.cloudflare.com</span>) to time your
+            connection. Like any server you connect to, Cloudflare sees your IP address for the duration of the
+            test; the traffic itself is meaningless random bytes, and the app sends no personal information —
+            it has none to send. Results are saved <b>only on your device</b> and deleted after 7 days.
+            Cloudflare's own privacy policy governs their side of the exchange.
+          </p>
+          <p>
+            <b>Fetch public IP.</b> When you tap it, the app asks a public echo service
+            (<span class="mono">api.ipify.org</span>) what your internet-facing address is and shows you the answer.
+            That's the entire transaction. The address is displayed, not stored.
+          </p>
+        </div>
+        <div>
+          <h3><span class="idx">3.2</span>What lives on your device</h3>
+          <p>
+            Your settings, your speed-test history (last 7 days, pruned automatically) and your best Nebula
+            Score are stored in the app's own container on your device. Delete the app and all of it is gone —
+            we could not recover it for you even if you asked, because we never had it.
+          </p>
+        </div>
+        <div>
+          <h3><span class="idx">3.3</span>Children</h3>
+          <p>
+            Nebula Stats collects nothing from anyone, and therefore nothing from children. There is no chat,
+            no user content, and nothing to buy.
+          </p>
+        </div>
+        <div>
+          <h3><span class="idx">3.4</span>If this policy ever changes</h3>
+          <p>
+            Any revision appears on this page with a new effective date before the update ships. There is no
+            lower rung than "nothing collected", so a change could only describe a new feature's exact network
+            behavior — as section 3.1 does today.
+          </p>
+        </div>
+        <div>
+          <h3><span class="idx">3.5</span>Questions</h3>
+          <p>
+            Write to mission control at <a href="mailto:martin.mmm1@icloud.com">martin.mmm1@icloud.com</a>.
+            Your email is used to reply to you, and for nothing else.
+          </p>
+        </div>
+      </div>
+
+      <div class="oath">
+        "I read the gauges. I light the panel. I transmit <b>nothing</b> —
+        not who flew, not when, not how fast the ship went."
+        <br>— the console's oath, etched behind the dashboard
+      </div>
+
+      <p class="effective">EFFECTIVE 15 JULY 2026 · NEBULA STATS 1.0</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="f-row">
+      <div class="mark">
+        <svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="17" fill="none" stroke="#38BDF8" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="80 27" transform="rotate(120 32 32)"/>
+          <circle cx="32" cy="32" r="6.5" fill="#A78BFA"/>
+        </svg>
+        <div class="name" style="font-size:15px">Nebula <span style="font-size:9px">STATS</span></div>
+      </div>
+      <div class="links">
+        <a href="#systems">Systems</a>
+        <a href="#privacy">Privacy</a>
+        <a href="mailto:martin.mmm1@icloud.com">Support</a>
+      </div>
+    </div>
+    <p class="small">BUILT FOR iOS 17+ · IPHONE &amp; IPAD · ALL TELEMETRY STAYS ABOARD</p>
+  </div>
+</footer>
+
+</body>
+</html>

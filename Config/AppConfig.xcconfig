@@ -1,0 +1,22 @@
+// ============================================================
+// Nebula Stats — account & identity configuration
+//
+// This is the ONLY file to edit when pointing the app at your
+// Apple Developer account:
+//
+//   1. PRODUCT_BUNDLE_IDENTIFIER — pick your reverse-domain id
+//      and register it (Codemagic's signing step can create it
+//      in the account automatically on first run).
+//   2. DEVELOPMENT_TEAM — your 10-character Team ID, from
+//      developer.apple.com → Membership. Only needed for
+//      building to a physical device from Xcode; simulator
+//      builds and Codemagic CI builds work without it
+//      (Codemagic injects signing itself).
+//
+// codemagic.yaml overwrites this file in CI from its BUNDLE_ID
+// variable, so CI and local builds can't drift apart.
+// ============================================================
+
+PRODUCT_BUNDLE_IDENTIFIER = com.martinmorris.nebulastats
+DEVELOPMENT_TEAM = 9TXFRHRPN6
+CODE_SIGN_STYLE = Automatic
